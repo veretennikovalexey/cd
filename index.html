@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chess Debut Trainer</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #16213e;
+      padding: 14px 24px;
+      border-bottom: 2px solid #0f3460;
+    }
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #e2b96f;
+      letter-spacing: 1px;
+    }
+
+    main {
+      padding: 20px 24px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+    .controls button {
+      padding: 8px 18px;
+      border: 1px solid #0f3460;
+      background: #16213e;
+      color: #e0e0e0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.15s, color 0.15s;
+    }
+    .controls button:hover { background: #0f3460; color: #e2b96f; }
+
+    .board-area {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+    }
+
+    #board { width: 480px; flex-shrink: 0; }
+
+    .side-panel {
+      flex: 1;
+      min-width: 200px;
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .side-panel-header {
+      padding: 10px 14px;
+      background: #0f3460;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #e2b96f;
+      letter-spacing: 0.5px;
+    }
+
+    #move-list-container {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 380px;
+      padding: 8px 0;
+    }
+
+    .move-row {
+      display: grid;
+      grid-template-columns: 32px 1fr 1fr;
+      align-items: center;
+      padding: 2px 10px;
+      border-radius: 4px;
+      margin: 1px 4px;
+    }
+    .move-num { font-size: 0.78rem; color: #888; }
+    .move {
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-family: 'Consolas', monospace;
+      transition: background 0.1s;
+    }
+    .move:hover { background: #0f3460; color: #e2b96f; }
+    .move.active-move { background: #e2b96f; color: #1a1a2e; font-weight: 600; }
+
+    .nav-buttons {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+      border-top: 1px solid #0f3460;
+    }
+    .nav-buttons button {
+      flex: 1;
+      padding: 7px 10px;
+      border: 1px solid #0f3460;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      transition: background 0.15s, color 0.15s;
+    }
+    .nav-buttons button:hover { background: #0f3460; color: #e2b96f; }
+    .nav-buttons button.step-btn {
+      font-size: 1.1rem;
+      padding: 7px 6px;
+    }
+
+    @media (max-width: 700px) {
+      .board-area { flex-direction: column; }
+      #board { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Chess Debut Trainer</h1>
+  </header>
+
+  <main>
+    <div class="controls">
+      <button id="btn-flip">↺ Повернуть</button>
+      <button id="btn-undo">← Отменить</button>
+      <button id="btn-redo">→ Повторить</button>
+      <button id="btn-clear">✕ Очистить</button>
+    </div>
+
+    <div class="board-area">
+      <div id="board"></div>
+
+      <div class="side-panel">
+        <div class="side-panel-header">
+          <span id="turn-indicator">Ход белых</span>
+        </div>
+        <div id="move-list-container">
+          <div id="move-list"></div>
+        </div>
+        <div class="nav-buttons">
+          <button id="btn-start">⏮</button>
+          <button id="btn-step-back" class="step-btn" title="Шаг назад  [←]">◀</button>
+          <button id="btn-step-fwd"  class="step-btn" title="Шаг вперёд [→]">▶</button>
+          <button id="btn-end">⏭</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+
+  <script>
+    // ── localStorage helpers ──────────────────────────────────────────────────
+    const LS_KEY = 'chess_debut_moves';
+
+    function loadMoves() {
+      const data = localStorage.getItem(LS_KEY);
+      return data ? JSON.parse(data) : [];
+    }
+
+    function saveMoves(movesArray) {
+      localStorage.setItem(LS_KEY, JSON.stringify(movesArray));
+    }
+
+    function appendMove(moveObj) {
+      const moves = loadMoves();
+      moves.push(moveObj);
+      saveMoves(moves);
+    }
+
+    function deleteMovesFrom(index) {
+      const moves = loadMoves();
+      saveMoves(moves.slice(0, index));
+    }
+
+    function clearAllMoves() {
+      localStorage.removeItem(LS_KEY);
+    }
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    let board       = null;
+    let game        = null;
+    let savedMoves  = [];
+    let currentIdx  = -1;
+    let isReviewing = false;
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function updateTurnIndicator() {
+      const el = document.getElementById('turn-indicator');
+      if (isReviewing || currentIdx < savedMoves.length - 1) {
+        el.textContent = 'Режим просмотра';
+        el.style.color = '#aaa';
+      } else {
+        el.textContent = game.turn() === 'w' ? 'Ход белых' : 'Ход чёрных';
+        el.style.color = game.turn() === 'w' ? '#fff' : '#bbb';
+      }
+    }
+
+    // ── Move list rendering ───────────────────────────────────────────────────
+    function renderMoveList() {
+      const container = document.getElementById('move-list');
+      container.innerHTML = '';
+
+      for (let i = 0; i < savedMoves.length; i += 2) {
+        const whiteMove = savedMoves[i];
+        const blackMove = savedMoves[i + 1];
+
+        const row = document.createElement('div');
+        row.className = 'move-row';
+
+        const numSpan = document.createElement('span');
+        numSpan.className = 'move-num';
+        numSpan.textContent = whiteMove.move_number + '.';
+        row.appendChild(numSpan);
+
+        const whiteSpan = document.createElement('span');
+        whiteSpan.className = 'move white';
+        whiteSpan.textContent = whiteMove.move_san;
+        whiteSpan.dataset.idx = i;
+        if (i === currentIdx) whiteSpan.classList.add('active-move');
+        whiteSpan.addEventListener('click', () => goToMove(parseInt(whiteSpan.dataset.idx)));
+        row.appendChild(whiteSpan);
+
+        const blackSpan = document.createElement('span');
+        blackSpan.className = 'move black';
+        if (blackMove) {
+          blackSpan.textContent = blackMove.move_san;
+          blackSpan.dataset.idx = i + 1;
+          if (i + 1 === currentIdx) blackSpan.classList.add('active-move');
+          blackSpan.addEventListener('click', () => goToMove(parseInt(blackSpan.dataset.idx)));
+        }
+        row.appendChild(blackSpan);
+
+        container.appendChild(row);
+      }
+
+      const active = container.querySelector('.active-move');
+      if (active) active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    // ── Navigation ────────────────────────────────────────────────────────────
+    function goToMove(idx) {
+      if (idx < 0 || idx >= savedMoves.length) return;
+      currentIdx  = idx;
+      isReviewing = true;
+      const move  = savedMoves[idx];
+      game.load(move.fen_after);
+      board.position(move.fen_after, true);
+      renderMoveList();
+      updateTurnIndicator();
+    }
+
+    function goToStart() {
+      currentIdx  = -1;
+      isReviewing = true;
+      game.reset();
+      board.start(true);
+      renderMoveList();
+      updateTurnIndicator();
+    }
+
+    function goToEnd() {
+      if (savedMoves.length === 0) return;
+      currentIdx  = savedMoves.length - 1;
+      isReviewing = false;
+      const last  = savedMoves[currentIdx];
+      game.load(last.fen_after);
+      board.position(last.fen_after, true);
+      renderMoveList();
+      updateTurnIndicator();
+    }
+
+    // ── Undo / Redo ───────────────────────────────────────────────────────────
+    function undoMove() {
+      if (savedMoves.length === 0) return;
+
+      if (!isReviewing && currentIdx === savedMoves.length - 1) {
+        // Recording mode — remove last move from localStorage
+        savedMoves.pop();
+        deleteMovesFrom(savedMoves.length);
+        currentIdx = savedMoves.length - 1;
+
+        if (savedMoves.length === 0) {
+          game.reset();
+          board.start(true);
+        } else {
+          const prev = savedMoves[currentIdx];
+          game.load(prev.fen_after);
+          board.position(prev.fen_after, true);
+        }
+      } else {
+        // Review mode — step back
+        if (currentIdx <= -1) return;
+        currentIdx--;
+        isReviewing = true;
+
+        if (currentIdx === -1) {
+          game.reset();
+          board.start(true);
+        } else {
+          const move = savedMoves[currentIdx];
+          game.load(move.fen_after);
+          board.position(move.fen_after, true);
+        }
+      }
+
+      renderMoveList();
+      updateTurnIndicator();
+    }
+
+    function redoMove() {
+      if (!isReviewing && currentIdx === savedMoves.length - 1) return;
+      if (currentIdx >= savedMoves.length - 1) {
+        isReviewing = false;
+        renderMoveList();
+        updateTurnIndicator();
+        return;
+      }
+
+      currentIdx++;
+      const move = savedMoves[currentIdx];
+      game.load(move.fen_after);
+      board.position(move.fen_after, true);
+
+      if (currentIdx === savedMoves.length - 1) isReviewing = false;
+
+      renderMoveList();
+      updateTurnIndicator();
+    }
+
+    // ── Step navigation (never deletes moves) ────────────────────────────────
+    function stepBack() {
+      if (savedMoves.length === 0 || currentIdx === -1) return;
+      currentIdx--;
+      isReviewing = currentIdx < savedMoves.length - 1;
+
+      if (currentIdx === -1) {
+        game.reset();
+        board.start(true);
+        isReviewing = true;
+      } else {
+        const move = savedMoves[currentIdx];
+        game.load(move.fen_after);
+        board.position(move.fen_after, true);
+      }
+
+      renderMoveList();
+      updateTurnIndicator();
+    }
+
+    function stepForward() {
+      if (currentIdx >= savedMoves.length - 1) return;
+      currentIdx++;
+      const move = savedMoves[currentIdx];
+      game.load(move.fen_after);
+      board.position(move.fen_after, true);
+      isReviewing = currentIdx < savedMoves.length - 1;
+
+      renderMoveList();
+      updateTurnIndicator();
+    }
+
+    // ── chessboard.js callbacks ───────────────────────────────────────────────
+    function onDragStart(source, piece) {
+      if (isReviewing || currentIdx < savedMoves.length - 1) return false;
+      if (game.game_over()) return false;
+      if (game.turn() === 'w' && piece.startsWith('b')) return false;
+      if (game.turn() === 'b' && piece.startsWith('w')) return false;
+      return true;
+    }
+
+    function onDrop(source, target) {
+      const fenBefore = game.fen();
+      const move = game.move({ from: source, to: target, promotion: 'q' });
+      if (!move) return 'snapback';
+
+      const fenAfter   = game.fen();
+      const moveNumber = Math.ceil((savedMoves.length + 1) / 2);
+      const color      = move.color === 'w' ? 'white' : 'black';
+
+      const data = {
+        move_number: moveNumber,
+        color:       color,
+        move_san:    move.san,
+        move_uci:    source + target,
+        fen_before:  fenBefore,
+        fen_after:   fenAfter
+      };
+
+      savedMoves.push(data);
+      appendMove(data);
+      currentIdx = savedMoves.length - 1;
+
+      renderMoveList();
+      updateTurnIndicator();
+    }
+
+    function onSnapEnd() {
+      board.position(game.fen());
+    }
+
+    // ── Initialization ────────────────────────────────────────────────────────
+    function init() {
+      game = new Chess();
+
+      const config = {
+        draggable:    true,
+        position:     'start',
+        showNotation: true,
+        pieceTheme:   'img/chesspieces/wikipedia/{piece}.png',
+        onDragStart:  onDragStart,
+        onDrop:       onDrop,
+        onSnapEnd:    onSnapEnd
+      };
+
+      board = Chessboard('board', config);
+
+      savedMoves = loadMoves();
+
+      if (savedMoves.length > 0) {
+        currentIdx  = savedMoves.length - 1;
+        isReviewing = false;
+        const last  = savedMoves[currentIdx];
+        game.load(last.fen_after);
+        board.position(last.fen_after, false);
+      }
+
+      renderMoveList();
+      updateTurnIndicator();
+
+      document.getElementById('btn-flip').addEventListener('click', () => board.flip());
+      document.getElementById('btn-undo').addEventListener('click', undoMove);
+      document.getElementById('btn-redo').addEventListener('click', redoMove);
+      document.getElementById('btn-start').addEventListener('click', goToStart);
+      document.getElementById('btn-end').addEventListener('click', goToEnd);
+      document.getElementById('btn-step-back').addEventListener('click', stepBack);
+      document.getElementById('btn-step-fwd').addEventListener('click', stepForward);
+
+      document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); stepBack(); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); stepForward(); }
+      });
+      document.getElementById('btn-clear').addEventListener('click', () => {
+        if (!confirm('Очистить всю партию?')) return;
+        clearAllMoves();
+        savedMoves  = [];
+        currentIdx  = -1;
+        isReviewing = false;
+        game.reset();
+        board.start(true);
+        renderMoveList();
+        updateTurnIndicator();
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
