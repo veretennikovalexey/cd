@@ -28,6 +28,13 @@
       color: #e2b96f;
       letter-spacing: 1px;
     }
+    #debut-name {
+      font-size: 1rem;
+      font-weight: 400;
+      color: #aac4e2;
+      margin-left: 10px;
+      opacity: 0.9;
+    }
 
     main {
       padding: 20px 24px;
@@ -138,7 +145,7 @@
 </head>
 <body>
   <header>
-    <h1>Chess Debut Trainer</h1>
+    <h1>Chess Debut Trainer<span id="debut-name"></span></h1>
   </header>
 
   <main>
@@ -477,9 +484,11 @@
       document.getElementById('pgn-file-input').addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        // Имя файла без расширения, декодировать как есть (браузер уже UTF-8)
+        const rawName = file.name.replace(/\.pgn$/i, '');
         const reader = new FileReader();
-        reader.onload = (ev) => loadPGN(ev.target.result);
-        reader.readAsText(file);
+        reader.onload = (ev) => loadPGN(ev.target.result, rawName);
+        reader.readAsText(file, 'UTF-8');
         e.target.value = ''; // сброс, чтобы можно было загрузить тот же файл повторно
       });
 
@@ -521,7 +530,7 @@
     }
 
     // ── PGN Import ────────────────────────────────────────────────────────────
-    function loadPGN(pgnText) {
+    function loadPGN(pgnText, debutName) {
       const tempGame = new Chess();
       const ok = tempGame.load_pgn(pgnText);
       if (!ok) { alert('Ошибка: не удалось разобрать PGN-файл.'); return; }
@@ -560,6 +569,12 @@
       } else {
         game.reset();
         board.start(true);
+      }
+
+      // Показываем имя дебюта в заголовке
+      const debutEl = document.getElementById('debut-name');
+      if (debutName) {
+        debutEl.textContent = ' — ' + debutName;
       }
 
       renderMoveList();
