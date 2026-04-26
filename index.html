@@ -147,6 +147,9 @@
       <button id="btn-undo">← Отменить</button>
       <button id="btn-redo">→ Повторить</button>
       <button id="btn-clear">✕ Очистить</button>
+      <button id="btn-save-pgn">💾 Save PGN</button>
+      <button id="btn-load-pgn">📂 Load PGN</button>
+      <input type="file" id="pgn-file-input" accept=".pgn" style="display:none">
     </div>
 
     <div class="board-area">
@@ -465,6 +468,21 @@
         if (e.key === 'ArrowLeft')  { e.preventDefault(); stepBack(); }
         if (e.key === 'ArrowRight') { e.preventDefault(); stepForward(); }
       });
+      document.getElementById('btn-save-pgn').addEventListener('click', savePGN);
+
+      document.getElementById('btn-load-pgn').addEventListener('click', () => {
+        document.getElementById('pgn-file-input').click();
+      });
+
+      document.getElementById('pgn-file-input').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => loadPGN(ev.target.result);
+        reader.readAsText(file);
+        e.target.value = ''; // сброс, чтобы можно было загрузить тот же файл повторно
+      });
+
       document.getElementById('btn-clear').addEventListener('click', () => {
         if (!confirm('Очистить всю партию?')) return;
         clearAllMoves();
@@ -476,6 +494,76 @@
         renderMoveList();
         updateTurnIndicator();
       });
+    }
+
+    // ── PGN Export ────────────────────────────────────────────────────────────
+    function buildPGN() {
+      const tempGame = new Chess();
+      for (const m of savedMoves) {
+        tempGame.move(m.move_san);
+      }
+      return tempGame.pgn();
+    }
+
+    function savePGN() {
+      if (savedMoves.length === 0) { alert('Партия пуста — нечего сохранять.'); return; }
+      const name = prompt('Введите имя файла:', 'game');
+      if (!name) return;
+      const filename = name.endsWith('.pgn') ? name : name + '.pgn';
+      const pgn = buildPGN();
+      const blob = new Blob([pgn], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ── PGN Import ────────────────────────────────────────────────────────────
+    function loadPGN(pgnText) {
+      const tempGame = new Chess();
+      const ok = tempGame.load_pgn(pgnText);
+      if (!ok) { alert('Ошибка: не удалось разобрать PGN-файл.'); return; }
+
+      // Replay all moves and collect data
+      const history = tempGame.history({ verbose: true });
+      clearAllMoves();
+      savedMoves  = [];
+      currentIdx  = -1;
+      isReviewing = false;
+
+      const replayGame = new Chess();
+      for (const h of history) {
+        const fenBefore = replayGame.fen();
+        const move = replayGame.move({ from: h.from, to: h.to, promotion: h.promotion || 'q' });
+        if (!move) break;
+        const fenAfter   = replayGame.fen();
+        const moveNumber = Math.ceil((savedMoves.length + 1) / 2);
+        const data = {
+          move_number: moveNumber,
+          color:       move.color === 'w' ? 'white' : 'black',
+          move_san:    move.san,
+          move_uci:    h.from + h.to,
+          fen_before:  fenBefore,
+          fen_after:   fenAfter
+        };
+        savedMoves.push(data);
+        appendMove(data);
+      }
+
+      if (savedMoves.length > 0) {
+        currentIdx = savedMoves.length - 1;
+        const last = savedMoves[currentIdx];
+        game.load(last.fen_after);
+        board.position(last.fen_after, true);
+      } else {
+        game.reset();
+        board.start(true);
+      }
+
+      renderMoveList();
+      updateTurnIndicator();
     }
 
     document.addEventListener('DOMContentLoaded', init);
