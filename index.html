@@ -212,11 +212,12 @@
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
-    let board       = null;
-    let game        = null;
-    let savedMoves  = [];
-    let currentIdx  = -1;
-    let isReviewing = false;
+    let board            = null;
+    let game             = null;
+    let savedMoves       = [];
+    let currentIdx       = -1;
+    let isReviewing      = false;
+    let currentDebutName = '';
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     function updateTurnIndicator() {
@@ -516,9 +517,12 @@
 
     function savePGN() {
       if (savedMoves.length === 0) { alert('Партия пуста — нечего сохранять.'); return; }
-      const name = prompt('Введите имя файла:', 'game');
+      const defaultName = currentDebutName || 'game';
+      const name = prompt('Введите имя файла:', defaultName);
       if (!name) return;
       const filename = name.endsWith('.pgn') ? name : name + '.pgn';
+      currentDebutName = name.replace(/\.pgn$/i, '');
+      document.getElementById('debut-name').textContent = ' — ' + currentDebutName;
       const pgn = buildPGN();
       const blob = new Blob([pgn], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
@@ -574,6 +578,7 @@
       // Показываем имя дебюта в заголовке
       const debutEl = document.getElementById('debut-name');
       if (debutName) {
+        currentDebutName = debutName;
         debutEl.textContent = ' — ' + debutName;
       }
 
