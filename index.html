@@ -185,7 +185,8 @@
 
   <script>
     // ── localStorage helpers ──────────────────────────────────────────────────
-    const LS_KEY = 'chess_debut_moves';
+    const LS_KEY      = 'chess_debut_moves';
+    const LS_NAME_KEY = 'chess_debut_name';
 
     function loadMoves() {
       const data = localStorage.getItem(LS_KEY);
@@ -209,6 +210,24 @@
 
     function clearAllMoves() {
       localStorage.removeItem(LS_KEY);
+      localStorage.removeItem(LS_NAME_KEY);
+    }
+
+    function saveDebutName(name) {
+      if (name) {
+        localStorage.setItem(LS_NAME_KEY, name);
+      } else {
+        localStorage.removeItem(LS_NAME_KEY);
+      }
+    }
+
+    function loadDebutName() {
+      return localStorage.getItem(LS_NAME_KEY) || '';
+    }
+
+    function applyDebutName(name) {
+      const debutEl = document.getElementById('debut-name');
+      debutEl.textContent = name ? ' — ' + name : '';
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -459,6 +478,9 @@
         board.position(last.fen_after, false);
       }
 
+      // Восстановить название дебюта из localStorage
+      applyDebutName(loadDebutName());
+
       renderMoveList();
       updateTurnIndicator();
 
@@ -500,6 +522,7 @@
         isReviewing = false;
         game.reset();
         board.start(true);
+        applyDebutName('');
         renderMoveList();
         updateTurnIndicator();
       });
@@ -527,6 +550,11 @@
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
+
+      // Сохранить и показать имя дебюта (без расширения .pgn)
+      const debutName = name.replace(/\.pgn$/i, '');
+      saveDebutName(debutName);
+      applyDebutName(debutName);
     }
 
     // ── PGN Import ────────────────────────────────────────────────────────────
@@ -571,11 +599,9 @@
         board.start(true);
       }
 
-      // Показываем имя дебюта в заголовке
-      const debutEl = document.getElementById('debut-name');
-      if (debutName) {
-        debutEl.textContent = ' — ' + debutName;
-      }
+      // Сохраняем и показываем имя дебюта в заголовке
+      saveDebutName(debutName);
+      applyDebutName(debutName);
 
       renderMoveList();
       updateTurnIndicator();
