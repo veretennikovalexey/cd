@@ -603,18 +603,9 @@
         board.start(true);
       }
 
-<<<<<<< HEAD
-      // Показываем имя дебюта в заголовке
-      const debutEl = document.getElementById('debut-name');
-      if (debutName) {
-        currentDebutName = debutName;
-        debutEl.textContent = ' — ' + debutName;
-      }
-=======
       // Сохраняем и показываем имя дебюта в заголовке
       saveDebutName(debutName);
       applyDebutName(debutName);
->>>>>>> d630876369fdf0c354e0c0f87b19762dc6f1923a
 
       renderMoveList();
       updateTurnIndicator();
