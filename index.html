@@ -49,16 +49,91 @@
       flex-wrap: wrap;
     }
     .controls button {
-      padding: 8px 18px;
+      width: 44px;
+      height: 44px;
+      padding: 0;
       border: 1px solid #0f3460;
       background: #16213e;
       color: #e0e0e0;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 0.9rem;
+      transition: background 0.15s, transform 0.1s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .controls button img {
+      width: 24px;
+      height: 24px;
+      display: block;
+      pointer-events: none;
+    }
+    .controls button:hover { background: #0f3460; }
+    .controls button:active { transform: scale(0.95); }
+
+    /* ── Modal со списком дебютов ─────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: #16213e;
+      border: 1px solid #0f3460;
+      border-radius: 10px;
+      width: min(420px, 92vw);
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    }
+    .modal-header {
+      padding: 14px 18px;
+      background: #0f3460;
+      color: #e2b96f;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: #e2b96f;
+      font-size: 1.4rem;
+      cursor: pointer;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .modal-close:hover { color: #fff; }
+    .debut-list {
+      list-style: none;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+    .debut-list li {
+      padding: 12px 18px;
+      cursor: pointer;
+      color: #e0e0e0;
+      border-bottom: 1px solid rgba(15, 52, 96, 0.5);
       transition: background 0.15s, color 0.15s;
     }
-    .controls button:hover { background: #0f3460; color: #e2b96f; }
+    .debut-list li:last-child { border-bottom: none; }
+    .debut-list li:hover { background: #0f3460; color: #e2b96f; }
+    .debut-list .empty {
+      padding: 18px;
+      color: #888;
+      cursor: default;
+      text-align: center;
+    }
+    .debut-list .empty:hover { background: transparent; color: #888; }
 
     .board-area {
       display: flex;
@@ -122,20 +197,26 @@
     }
     .nav-buttons button {
       flex: 1;
-      padding: 7px 10px;
+      height: 38px;
+      padding: 0;
       border: 1px solid #0f3460;
       background: #1a1a2e;
       color: #e0e0e0;
       border-radius: 6px;
       cursor: pointer;
-      font-size: 0.82rem;
-      transition: background 0.15s, color 0.15s;
+      transition: background 0.15s, transform 0.1s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
     }
-    .nav-buttons button:hover { background: #0f3460; color: #e2b96f; }
-    .nav-buttons button.step-btn {
-      font-size: 1.1rem;
-      padding: 7px 6px;
+    .nav-buttons button img {
+      width: 22px;
+      height: 22px;
+      display: block;
+      pointer-events: none;
     }
+    .nav-buttons button:hover { background: #0f3460; }
+    .nav-buttons button:active { transform: scale(0.95); }
 
     @media (max-width: 700px) {
       .board-area { flex-direction: column; }
@@ -150,13 +231,26 @@
 
   <main>
     <div class="controls">
-      <button id="btn-flip">↺ Повернуть</button>
-      <button id="btn-undo">← Отменить</button>
-      <button id="btn-redo">→ Повторить</button>
-      <button id="btn-clear">✕ Очистить</button>
-      <button id="btn-save-pgn">💾 Save PGN</button>
-      <button id="btn-load-pgn">📂 Load PGN</button>
+      <button id="btn-flip"     title="Повернуть"><img src="img/icons/flip.png"      alt=""></button>
+      <button id="btn-undo"     title="Отменить"><img  src="img/icons/undo.png"      alt=""></button>
+      <button id="btn-redo"     title="Повторить"><img src="img/icons/redo.png"      alt=""></button>
+      <button id="btn-clear"    title="Очистить"><img  src="img/icons/clear.png"     alt=""></button>
+      <button id="btn-save-pgn" title="Save PGN"><img  src="img/icons/save.png"      alt=""></button>
+      <button id="btn-load-pgn" title="Load PGN"><img  src="img/icons/load.png"      alt=""></button>
+      <button id="btn-home"     title="Сохранённые дебюты"><img src="img/icons/home.png" alt=""></button>
       <input type="file" id="pgn-file-input" accept=".pgn" style="display:none">
+      <input type="file" id="sd-file-input"  accept=".json,application/json" style="display:none">
+    </div>
+
+    <!-- Модальное окно со списком сохранённых дебютов из sd.json -->
+    <div class="modal-overlay" id="debut-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <span>Сохранённые дебюты</span>
+          <button class="modal-close" id="btn-modal-close" title="Закрыть">×</button>
+        </div>
+        <ul class="debut-list" id="debut-list"></ul>
+      </div>
     </div>
 
     <div class="board-area">
@@ -170,10 +264,10 @@
           <div id="move-list"></div>
         </div>
         <div class="nav-buttons">
-          <button id="btn-start">⏮</button>
-          <button id="btn-step-back" class="step-btn" title="Шаг назад  [←]">◀</button>
-          <button id="btn-step-fwd"  class="step-btn" title="Шаг вперёд [→]">▶</button>
-          <button id="btn-end">⏭</button>
+          <button id="btn-start"     title="В начало"><img src="img/icons/start.png"     alt=""></button>
+          <button id="btn-step-back" title="Шаг назад  [←]"><img src="img/icons/step-back.png" alt=""></button>
+          <button id="btn-step-fwd"  title="Шаг вперёд [→]"><img src="img/icons/step-fwd.png"  alt=""></button>
+          <button id="btn-end"       title="В конец"><img src="img/icons/end.png"       alt=""></button>
         </div>
       </div>
     </div>
@@ -515,6 +609,28 @@
         e.target.value = ''; // сброс, чтобы можно было загрузить тот же файл повторно
       });
 
+      // ── Кнопка «домик» — список сохранённых дебютов из sd.json ─────────
+      document.getElementById('btn-home').addEventListener('click', openDebutsList);
+      document.getElementById('btn-modal-close').addEventListener('click', closeDebutsList);
+      document.getElementById('debut-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'debut-modal') closeDebutsList();
+      });
+      document.getElementById('sd-file-input').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          try {
+            const data = JSON.parse(ev.target.result);
+            renderDebutList(data);
+          } catch (err) {
+            renderDebutListError('Ошибка чтения sd.json: ' + err.message);
+          }
+        };
+        reader.readAsText(file, 'UTF-8');
+      });
+
       document.getElementById('btn-clear').addEventListener('click', () => {
         if (!confirm('Очистить всю партию?')) return;
         clearAllMoves();
@@ -610,6 +726,113 @@
       renderMoveList();
       updateTurnIndicator();
     }
+
+    // ── Список сохранённых дебютов из sd.json ─────────────────────────────
+    function openDebutsList() {
+      const modal = document.getElementById('debut-modal');
+      modal.classList.add('active');
+      const list = document.getElementById('debut-list');
+      list.innerHTML = '<li class="empty">Загрузка sd.json…</li>';
+
+      // Пробуем fetch — работает на http(s):// и в большинстве случаев на file:// в Firefox.
+      // На file:// в Chrome/Edge fetch заблокирован — тогда откроется диалог выбора файла.
+      fetch('sd.json', { cache: 'no-store' })
+        .then(resp => {
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          return resp.text();
+        })
+        .then(text => {
+          try {
+            const data = JSON.parse(text);
+            renderDebutList(data);
+          } catch (e) {
+            renderDebutListError('sd.json: некорректный JSON — ' + e.message);
+          }
+        })
+        .catch(err => {
+          // Fallback: страница открыта как file:// и браузер заблокировал fetch.
+          // Просим пользователя выбрать sd.json вручную.
+          renderDebutListError(
+            'Не удалось автоматически прочитать sd.json (' + err.message + ').<br>' +
+            'Выберите файл вручную:'
+          );
+          const li = document.createElement('li');
+          li.style.padding = '8px 18px 14px';
+          const btn = document.createElement('button');
+          btn.textContent = 'Выбрать sd.json';
+          btn.style.cssText =
+            'width:100%;padding:10px;border:1px solid #0f3460;background:#1a1a2e;' +
+            'color:#e2b96f;border-radius:6px;cursor:pointer;font-size:0.9rem;';
+          btn.addEventListener('click', () =>
+            document.getElementById('sd-file-input').click()
+          );
+          li.appendChild(btn);
+          li.classList.add('empty');
+          li.style.cursor = 'default';
+          document.getElementById('debut-list').appendChild(li);
+        });
+    }
+
+    function closeDebutsList() {
+      document.getElementById('debut-modal').classList.remove('active');
+    }
+
+    function renderDebutListError(msg) {
+      const list = document.getElementById('debut-list');
+      list.innerHTML = '';
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.innerHTML = msg;
+      list.appendChild(li);
+    }
+
+    function renderDebutList(data) {
+      const list = document.getElementById('debut-list');
+      list.innerHTML = '';
+
+      const debuts = (data && Array.isArray(data.debuts)) ? data.debuts : [];
+      if (debuts.length === 0) {
+        renderDebutListError('Список пуст. Добавьте дебюты в sd.json.');
+        return;
+      }
+
+      // Показываем только названия — без ходов.
+      debuts.forEach((d, idx) => {
+        const li = document.createElement('li');
+        li.textContent = d.name || ('Дебют #' + (idx + 1));
+        li.title = 'Загрузить на доску';
+        li.addEventListener('click', () => {
+          loadDebutFromList(d);
+        });
+        list.appendChild(li);
+      });
+    }
+
+    function loadDebutFromList(debut) {
+      // Поддерживаем 2 формы записи дебюта в sd.json:
+      //   - "pgn":   "1. e4 c5 2. Nf3 ..."   (рекомендованная — удобно править в редакторе)
+      //   - "moves": ["e4", "c5", "Nf3", ...] (массив ходов в SAN)
+      let pgn = debut.pgn;
+      if (!pgn && Array.isArray(debut.moves)) {
+        // Преобразуем массив ходов в строку PGN.
+        let out = '';
+        for (let i = 0; i < debut.moves.length; i++) {
+          if (i % 2 === 0) out += (i / 2 + 1) + '. ';
+          out += debut.moves[i] + ' ';
+        }
+        pgn = out.trim();
+      }
+      if (!pgn) {
+        alert('У дебюта «' + (debut.name || '?') + '» нет ходов (поля "pgn" или "moves").');
+        return;
+      }
+      loadPGN(pgn, debut.name || '');
+      closeDebutsList();
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeDebutsList();
+    });
 
     document.addEventListener('DOMContentLoaded', init);
   </script>
