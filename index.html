@@ -22,6 +22,13 @@
       padding: 14px 24px;
       border-bottom: 2px solid #0f3460;
     }
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
     header h1 {
       font-size: 1.4rem;
       font-weight: 600;
@@ -35,6 +42,40 @@
       margin-left: 10px;
       opacity: 0.9;
     }
+
+    /* ── Индикатор режима оценки (A — простая / B — Stockfish) ─────────── */
+    .eval-mode {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      background: rgba(15, 52, 96, 0.5);
+      color: #aac4e2;
+      border: 1px solid #0f3460;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .eval-mode .badge {
+      display: inline-block;
+      width: 22px;
+      height: 22px;
+      line-height: 20px;
+      text-align: center;
+      border-radius: 50%;
+      font-weight: 700;
+      font-size: 0.78rem;
+      color: #fff;
+      background: #888;
+      transition: background 0.2s;
+    }
+    .eval-mode.mode-a   { border-color: #555; }
+    .eval-mode.mode-a   .badge { background: #777; }
+    .eval-mode.mode-b   { border-color: #2e7d3e; background: rgba(46, 125, 62, 0.18); }
+    .eval-mode.mode-b   .badge { background: #2e7d3e; }
+    .eval-mode.mode-failed { border-color: #c47a2e; background: rgba(196, 122, 46, 0.18); }
+    .eval-mode.mode-failed .badge { background: #c47a2e; }
+    .eval-mode .text { letter-spacing: 0.3px; }
 
     main {
       padding: 20px 24px;
@@ -141,7 +182,52 @@
       align-items: flex-start;
     }
 
+    .board-and-eval {
+      display: flex;
+      gap: 6px;
+      align-items: stretch;
+      flex-shrink: 0;
+    }
+
     #board { width: 480px; flex-shrink: 0; }
+
+    /* ── Полоска оценки позиции слева от доски ───────────────────────────── */
+    .eval-bar {
+      width: 22px;
+      background: #1a1a2e;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      position: relative;
+      overflow: hidden;
+      align-self: stretch;
+    }
+    .eval-bar-fill {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 100%;
+      height: 50%;
+      background: #f0f0f0;
+      transition: height 0.35s ease;
+    }
+    .eval-bar.flipped .eval-bar-fill {
+      bottom: auto;
+      top: 0;
+    }
+    .eval-value {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.62rem;
+      font-weight: 700;
+      font-family: 'Consolas', monospace;
+      letter-spacing: -0.5px;
+      z-index: 2;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .eval-value.bottom { bottom: 3px; color: #1a1a2e; }
+    .eval-value.top    { top: 3px;    color: #f0f0f0; }
 
     .side-panel {
       flex: 1;
@@ -220,13 +306,20 @@
 
     @media (max-width: 700px) {
       .board-area { flex-direction: column; }
-      #board { width: 100%; }
+      .board-and-eval { width: 100%; }
+      #board { width: calc(100% - 28px); }
     }
   </style>
 </head>
 <body>
   <header>
-    <h1>Chess Debut Trainer<span id="debut-name"></span></h1>
+    <div class="header-inner">
+      <h1>Chess Debut Trainer<span id="debut-name"></span></h1>
+      <div class="eval-mode mode-a" id="eval-mode" title="Какой движок оценки активен">
+        <span class="badge" id="eval-mode-badge">A</span>
+        <span class="text" id="eval-mode-text">простая (загрузка Stockfish…)</span>
+      </div>
+    </div>
   </header>
 
   <main>
@@ -254,7 +347,13 @@
     </div>
 
     <div class="board-area">
-      <div id="board"></div>
+      <div class="board-and-eval">
+        <div class="eval-bar" id="eval-bar">
+          <div class="eval-bar-fill" id="eval-bar-fill"></div>
+          <div class="eval-value bottom" id="eval-value">0.0</div>
+        </div>
+        <div id="board"></div>
+      </div>
 
       <div class="side-panel">
         <div class="side-panel-header">
@@ -342,6 +441,266 @@
         el.textContent = game.turn() === 'w' ? 'Ход белых' : 'Ход чёрных';
         el.style.color = game.turn() === 'w' ? '#fff' : '#bbb';
       }
+      updateEvalBar();
+    }
+
+    // ── Position evaluation: material + piece-square tables ──────────────────
+    // Все таблицы — с точки зрения белых; индекс 0 = a8, индекс 63 = h1
+    // (порядок чтения FEN-доски). Для чёрной фигуры индекс зеркалится: idx ^ 56.
+    const PST_PAWN = [
+       0,   0,   0,   0,   0,   0,   0,   0,
+      50,  50,  50,  50,  50,  50,  50,  50,
+      10,  10,  20,  30,  30,  20,  10,  10,
+       5,   5,  10,  25,  25,  10,   5,   5,
+       0,   0,   0,  20,  20,   0,   0,   0,
+       5,  -5, -10,   0,   0, -10,  -5,   5,
+       5,  10,  10, -20, -20,  10,  10,   5,
+       0,   0,   0,   0,   0,   0,   0,   0
+    ];
+    const PST_KNIGHT = [
+     -50, -40, -30, -30, -30, -30, -40, -50,
+     -40, -20,   0,   0,   0,   0, -20, -40,
+     -30,   0,  10,  15,  15,  10,   0, -30,
+     -30,   5,  15,  20,  20,  15,   5, -30,
+     -30,   0,  15,  20,  20,  15,   0, -30,
+     -30,   5,  10,  15,  15,  10,   5, -30,
+     -40, -20,   0,   5,   5,   0, -20, -40,
+     -50, -40, -30, -30, -30, -30, -40, -50
+    ];
+    const PST_BISHOP = [
+     -20, -10, -10, -10, -10, -10, -10, -20,
+     -10,   0,   0,   0,   0,   0,   0, -10,
+     -10,   0,   5,  10,  10,   5,   0, -10,
+     -10,   5,   5,  10,  10,   5,   5, -10,
+     -10,   0,  10,  10,  10,  10,   0, -10,
+     -10,  10,  10,  10,  10,  10,  10, -10,
+     -10,   5,   0,   0,   0,   0,   5, -10,
+     -20, -10, -10, -10, -10, -10, -10, -20
+    ];
+    const PST_ROOK = [
+       0,   0,   0,   0,   0,   0,   0,   0,
+       5,  10,  10,  10,  10,  10,  10,   5,
+      -5,   0,   0,   0,   0,   0,   0,  -5,
+      -5,   0,   0,   0,   0,   0,   0,  -5,
+      -5,   0,   0,   0,   0,   0,   0,  -5,
+      -5,   0,   0,   0,   0,   0,   0,  -5,
+      -5,   0,   0,   0,   0,   0,   0,  -5,
+       0,   0,   0,   5,   5,   0,   0,   0
+    ];
+    const PST_QUEEN = [
+     -20, -10, -10,  -5,  -5, -10, -10, -20,
+     -10,   0,   0,   0,   0,   0,   0, -10,
+     -10,   0,   5,   5,   5,   5,   0, -10,
+      -5,   0,   5,   5,   5,   5,   0,  -5,
+       0,   0,   5,   5,   5,   5,   0,  -5,
+     -10,   5,   5,   5,   5,   5,   0, -10,
+     -10,   0,   5,   0,   0,   0,   0, -10,
+     -20, -10, -10,  -5,  -5, -10, -10, -20
+    ];
+    const PST_KING = [
+     -30, -40, -40, -50, -50, -40, -40, -30,
+     -30, -40, -40, -50, -50, -40, -40, -30,
+     -30, -40, -40, -50, -50, -40, -40, -30,
+     -30, -40, -40, -50, -50, -40, -40, -30,
+     -20, -30, -30, -40, -40, -30, -30, -20,
+     -10, -20, -20, -20, -20, -20, -20, -10,
+      20,  20,   0,   0,   0,   0,  20,  20,
+      20,  30,  10,   0,   0,  10,  30,  20
+    ];
+    const PST       = { p: PST_PAWN, n: PST_KNIGHT, b: PST_BISHOP, r: PST_ROOK, q: PST_QUEEN, k: PST_KING };
+    const PIECE_VAL = { p: 100,      n: 320,        b: 330,        r: 500,     q: 900,        k: 0         };
+
+    function evaluatePosition() {
+      // Возвращает { score (в пешках, плюс — лучше белым), label, isMate }
+      if (game.in_checkmate()) {
+        return game.turn() === 'w'
+          ? { score: -100, label: '0–1', isMate: true }
+          : { score:  100, label: '1–0', isMate: true };
+      }
+      if (game.in_stalemate() || game.in_threefold_repetition() || game.insufficient_material()) {
+        return { score: 0, label: '½–½', isMate: false };
+      }
+
+      const fenBoard = game.fen().split(' ')[0];
+      const ranks    = fenBoard.split('/');
+      let cp = 0;
+
+      for (let r = 0; r < 8; r++) {
+        let file = 0;
+        for (const ch of ranks[r]) {
+          if (ch >= '1' && ch <= '8') {
+            file += parseInt(ch, 10);
+          } else {
+            const isWhite = ch === ch.toUpperCase();
+            const piece   = ch.toLowerCase();
+            const idx     = r * 8 + file;
+            const pstIdx  = isWhite ? idx : (idx ^ 56);
+            const val     = PIECE_VAL[piece] || 0;
+            const pstVal  = PST[piece] ? PST[piece][pstIdx] : 0;
+            cp += isWhite ? (val + pstVal) : -(val + pstVal);
+            file++;
+          }
+        }
+      }
+
+      const score = cp / 100;
+      const sign  = score > 0 ? '+' : (score < 0 ? '−' : '');
+      const label = (Math.abs(score) < 0.05) ? '0.0' : sign + Math.abs(score).toFixed(1);
+      return { score, label, isMate: false };
+    }
+
+    function renderEvalBar(score, label) {
+      const fillEl  = document.getElementById('eval-bar-fill');
+      const valueEl = document.getElementById('eval-value');
+      const barEl   = document.getElementById('eval-bar');
+      if (!fillEl || !valueEl || !barEl) return;
+
+      const clamped  = Math.max(-5, Math.min(5, score));
+      const whitePct = 50 + (clamped / 5) * 50;
+
+      const flipped = (board && typeof board.orientation === 'function' && board.orientation() === 'black');
+      barEl.classList.toggle('flipped', flipped);
+      fillEl.style.height = whitePct + '%';
+
+      valueEl.textContent = label;
+      const onWhiteSide = score >= 0;
+      const atTop = flipped ? onWhiteSide : !onWhiteSide;
+      valueEl.classList.toggle('top', atTop);
+      valueEl.classList.toggle('bottom', !atTop);
+    }
+
+    function updateEvalBar() {
+      // 1) Сразу рисуем оценку от слоя A — это работает всегда и моментально.
+      const { score, label } = evaluatePosition();
+      renderEvalBar(score, label);
+      // 2) Если Stockfish готов — попросим у него тоже оценить эту же позицию.
+      //    Его более глубокая оценка перерисует полоску, когда придут info-строки.
+      if (engineReady) requestEngineEval(game.fen());
+    }
+
+    // ── Stockfish (слой B) ─────────────────────────────────────────────────
+    // Подключение: один файл engine/stockfish.asm.js (~957 KB), запускается
+    // в Web Worker'е, общение через UCI. Никакого интернета не нужно.
+    // Если Worker не стартанёт (политики безопасности браузера на file:// и т.п.)
+    // — остаёмся на слое A, индикатор покажет «не запустился».
+    let engine          = null;
+    let engineReady     = false;
+    let engineFailed    = false;
+    let isSearching     = false;
+    let pendingFen      = null;
+    let currentSearchFen = null;
+    const ENGINE_DEPTH  = 14;   // глубина поиска
+    const ENGINE_PATH   = 'engine/stockfish.asm.js';
+
+    function setEvalMode(mode, text) {
+      const el     = document.getElementById('eval-mode');
+      const badge  = document.getElementById('eval-mode-badge');
+      const txt    = document.getElementById('eval-mode-text');
+      if (!el || !badge || !txt) return;
+      el.classList.remove('mode-a', 'mode-b', 'mode-failed');
+      el.classList.add('mode-' + mode);
+      badge.textContent = (mode === 'b') ? 'B' : 'A';
+      txt.textContent   = text;
+    }
+
+    function initEngine() {
+      try {
+        engine = new Worker(ENGINE_PATH);
+      } catch (err) {
+        engineFailed = true;
+        setEvalMode('failed', 'простая · Stockfish не запустился');
+        console.warn('Stockfish: не удалось создать Worker —', err);
+        return;
+      }
+
+      engine.onerror = (err) => {
+        engineFailed = true;
+        engineReady  = false;
+        setEvalMode('failed', 'простая · Stockfish не запустился');
+        console.warn('Stockfish: ошибка Worker —', err && err.message);
+      };
+
+      engine.onmessage = (e) => {
+        const line = (typeof e.data === 'string') ? e.data : String(e.data);
+        handleEngineLine(line);
+      };
+
+      // UCI handshake
+      engine.postMessage('uci');
+    }
+
+    function handleEngineLine(line) {
+      if (line === 'uciok') {
+        engine.postMessage('isready');
+        return;
+      }
+      if (line === 'readyok') {
+        engineReady = true;
+        setEvalMode('b', 'Stockfish · готов');
+        requestEngineEval(game.fen());
+        return;
+      }
+      if (line.indexOf('bestmove') === 0) {
+        isSearching = false;
+        sendNextSearch();
+        return;
+      }
+      if (line.indexOf('info ') === 0 && line.indexOf(' score ') !== -1) {
+        parseInfoLine(line);
+        return;
+      }
+    }
+
+    function parseInfoLine(line) {
+      const tokens   = line.split(/\s+/);
+      const scoreIdx = tokens.indexOf('score');
+      if (scoreIdx === -1) return;
+      const type = tokens[scoreIdx + 1];
+      const val  = parseInt(tokens[scoreIdx + 2], 10);
+      if (Number.isNaN(val)) return;
+      const depthIdx = tokens.indexOf('depth');
+      const depth    = depthIdx >= 0 ? parseInt(tokens[depthIdx + 1], 10) : 0;
+
+      // UCI отдаёт оценку с точки зрения стороны, чей ход. Нормализуем к белым.
+      const turnChar = (currentSearchFen || game.fen()).split(' ')[1];
+      const sideMul  = (turnChar === 'w') ? 1 : -1;
+
+      let score, label;
+      if (type === 'cp') {
+        score = (val * sideMul) / 100;
+        const sign = score > 0 ? '+' : (score < 0 ? '−' : '');
+        label = (Math.abs(score) < 0.05) ? '0.0' : sign + Math.abs(score).toFixed(1);
+      } else if (type === 'mate') {
+        const m = val * sideMul;
+        if (m > 0)      { score =  100; label = '#' + m;     }
+        else if (m < 0) { score = -100; label = '−#' + (-m); }
+        else            { score = -100 * sideMul; label = sideMul > 0 ? '0–1' : '1–0'; }
+      } else {
+        return;
+      }
+
+      renderEvalBar(score, label);
+      setEvalMode('b', 'Stockfish · d' + depth);
+    }
+
+    function requestEngineEval(fen) {
+      if (!engineReady || engineFailed) return;
+      pendingFen = fen;
+      if (isSearching) {
+        engine.postMessage('stop');
+      } else {
+        sendNextSearch();
+      }
+    }
+
+    function sendNextSearch() {
+      if (!engineReady || pendingFen === null) return;
+      const fen = pendingFen;
+      pendingFen = null;
+      currentSearchFen = fen;
+      isSearching = true;
+      engine.postMessage('position fen ' + fen);
+      engine.postMessage('go depth ' + ENGINE_DEPTH);
     }
 
     // ── Move list rendering ───────────────────────────────────────────────────
@@ -643,6 +1002,9 @@
         renderMoveList();
         updateTurnIndicator();
       });
+
+      // Запускаем Stockfish (слой B). Если не получится — остаёмся на A.
+      initEngine();
     }
 
     // ── PGN Export ────────────────────────────────────────────────────────────
