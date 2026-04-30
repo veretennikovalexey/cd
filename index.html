@@ -570,12 +570,17 @@
     }
 
     function updateEvalBar() {
-      // 1) Сразу рисуем оценку от слоя A — это работает всегда и моментально.
+      // Если Stockfish готов — НЕ трогаем градусник вообще: он остаётся стоять
+      // там, где его оставила прошлая полная оценка (depth = ENGINE_DEPTH).
+      // Перерисуется только когда движок досчитает до целевой глубины.
+      // Слой A (материал + PST) используем только как фоллбэк, пока Stockfish
+      // не поднялся или совсем не запустился.
+      if (engineReady) {
+        requestEngineEval(game.fen());
+        return;
+      }
       const { score, label } = evaluatePosition();
       renderEvalBar(score, label);
-      // 2) Если Stockfish готов — попросим у него тоже оценить эту же позицию.
-      //    Его более глубокая оценка перерисует полоску, когда придут info-строки.
-      if (engineReady) requestEngineEval(game.fen());
     }
 
     // ── Stockfish (слой B) ─────────────────────────────────────────────────
@@ -679,7 +684,12 @@
         return;
       }
 
-      renderEvalBar(score, label);
+      // Перерисовываем градусник ТОЛЬКО когда движок досчитал до целевой глубины.
+      // Промежуточные info-строки (depth = 1..ENGINE_DEPTH-1) только обновляют
+      // текстовый индикатор «d…», но не двигают полоску — чтобы она не колыхалась.
+      if (depth >= ENGINE_DEPTH) {
+        renderEvalBar(score, label);
+      }
       setEvalMode('b', 'Stockfish · d' + depth);
     }
 
