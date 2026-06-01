@@ -11,6 +11,10 @@
     {
       "name": "1. e4 e5 2. d4 Nc6",
       "pgn": "1. e4 e5 2. d4 Nc6"
+    },
+    {
+      "name": "Darex100",
+      "pgn": "1. e4 e5 2. Bc4 Nf6 3. d3 d5 4. exd5 Nxd5 5. Nf3 Nc6 6. O-O Bg4 7. Nc3 Nb6 8. Bxf7+ Kxf7 9. Ng5+ Qxg5 10. Bxg5 Bxd1 11. Raxd1"
     }
 
   ]
