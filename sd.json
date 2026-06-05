@@ -1,22 +1,7 @@
 {
   "debuts": [
-    {
-      "name": "e4",
-      "pgn": "1. e4 e5 2. Nf3 Nc6 3. Nc3 Nf6 4. Bb5 Bc5 5. Bxc6 dxc6 6. Nxe5 Bxf2+"
-    },
-    {
-      "name": "e4 d4 c3",
-      "pgn": "1. e4 e5 2. d4 exd4 3. c3 d5"
-    },
-    {
-      "name": "1. e4 e5 2. d4 Nc6",
-      "pgn": "1. e4 e5 2. d4 Nc6"
-    },
-    {
-      "name": "Darex100",
-      "pgn": "1. e4 e5 2. Bc4 Nf6 3. d3 d5 4. exd5 Nxd5 5. Nf3 Nc6 6. O-O Bg4 7. Nc3 Nb6 8. Bxf7+ Kxf7 9. Ng5+ Qxg5 10. Bxg5 Bxd1 11. Raxd1"
-    }
-
+    { "name": "e4",
+      "pgn": "1. e4" }
   ]
 }
 
