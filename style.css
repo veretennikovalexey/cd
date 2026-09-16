@@ -238,6 +238,17 @@ main {
   letter-spacing: 0.5px;
 }
 
+#trainer-status {
+  padding: 8px 14px;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #aac4e2;
+  border-bottom: 1px solid #0f3460;
+}
+#trainer-status:empty { display: none; }
+#trainer-status.warn { color: #e2b96f; }
+#trainer-status.stop { color: #e57373; }
+
 #move-list-container {
   flex: 1;
   overflow-y: auto;

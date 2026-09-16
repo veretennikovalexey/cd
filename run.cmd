@@ -7,7 +7,7 @@ cd /d "%~dp0"
 
 echo.
 echo Starting local server on http://localhost:8000 ...
-start "Chess Local Server" cmd /k "python -m http.server 8000"
+start "Chess Local Server" cmd /k "python server.py"
 
 echo Waiting 3 seconds for server to start...
 timeout /t 2 /nobreak >nul

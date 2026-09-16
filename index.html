@@ -56,6 +56,7 @@
         <div class="side-panel-header">
           <span id="turn-indicator">Ход белых</span>
         </div>
+        <div id="trainer-status"></div>
         <div id="move-list-container">
           <div id="move-list"></div>
         </div>
@@ -128,6 +129,13 @@
     let isReviewing      = false;
     let currentDebutName = '';
 
+    const ROUSSEAU_NAME  = 'Гамбит Руссо';
+    const ROUSSEAU_LINE  = ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'f5'];
+    const COMPUTER_DELAY = 500;
+    const EXPLORER_URL   = 'explorer/lichess';
+    const EXPLORER_TOP   = 3;
+    const trainer        = { active: false, gen: 0 };
+
     // ── Helpers ───────────────────────────────────────────────────────────────
     function updateTurnIndicator() {
       const el = document.getElementById('turn-indicator');
@@ -135,8 +143,13 @@
         el.textContent = 'Режим просмотра';
         el.style.color = '#aaa';
       } else {
-        el.textContent = game.turn() === 'w' ? 'Ход белых' : 'Ход чёрных';
-        el.style.color = game.turn() === 'w' ? '#fff' : '#bbb';
+        const whiteTurn = game.turn() === 'w';
+        if (trainer.active) {
+          el.textContent = whiteTurn ? 'Ход белых (компьютер)' : 'Твой ход (чёрные)';
+        } else {
+          el.textContent = whiteTurn ? 'Ход белых' : 'Ход чёрных';
+        }
+        el.style.color = whiteTurn ? '#fff' : '#bbb';
       }
       updateEvalBar();
     }
@@ -488,6 +501,11 @@
     function undoMove() {
       if (savedMoves.length === 0) return;
 
+      if (!isReviewing && currentIdx === savedMoves.length - 1 && trainer.active) {
+        takeBackTrainer();
+        return;
+      }
+
       if (!isReviewing && currentIdx === savedMoves.length - 1) {
         // Recording mode — remove last move from localStorage
         savedMoves.pop();
@@ -574,10 +592,173 @@
       updateTurnIndicator();
     }
 
+    function setTrainerStatus(text, kind) {
+      const el = document.getElementById('trainer-status');
+      el.textContent = text || '';
+      el.className   = kind || '';
+    }
+
+    function lastFen() {
+      return savedMoves.length > 0 ? savedMoves[savedMoves.length - 1].fen_after : new Chess().fen();
+    }
+
+    function pushMove(move, fenBefore, fenAfter) {
+      const data = {
+        move_number: Math.ceil((savedMoves.length + 1) / 2),
+        color:       move.color === 'w' ? 'white' : 'black',
+        move_san:    move.san,
+        move_uci:    move.from + move.to,
+        fen_before:  fenBefore,
+        fen_after:   fenAfter
+      };
+      savedMoves.push(data);
+      appendMove(data);
+    }
+
+    function startTrainer() {
+      trainer.gen++;
+      trainer.active   = true;
+      clearAllMoves();
+      savedMoves       = [];
+      currentIdx       = -1;
+      isReviewing      = false;
+      currentDebutName = ROUSSEAU_NAME;
+      game.reset();
+      board.orientation('black');
+      board.start(true);
+      applyDebutName(ROUSSEAU_NAME);
+      setTrainerStatus('Гамбит Руссо: ты играешь чёрными, белые ходят сами.');
+      renderMoveList();
+      updateTurnIndicator();
+      scheduleComputerMove();
+    }
+
+    function stopTrainer(reason) {
+      trainer.gen++;
+      trainer.active = false;
+      setTrainerStatus(reason + ' Автоигра окончена — дальше двигай фигуры сам за обе стороны.', 'stop');
+      updateTurnIndicator();
+    }
+
+    function gameOverText(position) {
+      return position.in_checkmate() ? 'Мат. Партия окончена.' : 'Ничья. Партия окончена.';
+    }
+
+    function scheduleComputerMove() {
+      const gen      = trainer.gen;
+      const ply      = savedMoves.length;
+      const position = new Chess(lastFen());
+      if (!trainer.active || position.turn() !== 'w') return;
+      if (position.game_over()) {
+        setTrainerStatus(gameOverText(position));
+        return;
+      }
+
+      const scripted = ply < ROUSSEAU_LINE.length;
+      if (!scripted) setTrainerStatus('Белые смотрят статистику lichess…');
+
+      const choice = scripted ? Promise.resolve({ san: ROUSSEAU_LINE[ply] }) : fetchLichessMove(position.fen());
+      const pause  = new Promise(resolve => setTimeout(resolve, COMPUTER_DELAY));
+
+      Promise.all([choice, pause]).then(
+        ([picked]) => {
+          if (gen === trainer.gen) playComputerMove(picked);
+        },
+        err => {
+          if (gen === trainer.gen) stopTrainer('Статистика lichess не получена: ' + err.message + '.');
+        }
+      );
+    }
+
+    function fetchLichessMove(fen) {
+      const params = new URLSearchParams({
+        variant:     'standard',
+        fen:         fen,
+        moves:       String(EXPLORER_TOP),
+        topGames:    '0',
+        recentGames: '0'
+      });
+      return fetch(EXPLORER_URL + '?' + params.toString(), { cache: 'no-store' })
+        .catch(() => { throw new Error('локальный сервер не отвечает — запусти run.cmd'); })
+        .then(resp => {
+          if (resp.status === 404) throw new Error('нет прокси lichess — запусти run.cmd');
+          return resp.json()
+            .catch(() => { throw new Error('непонятный ответ сервера (HTTP ' + resp.status + ')'); })
+            .then(data => {
+              if (!resp.ok) throw new Error(data.error || 'HTTP ' + resp.status);
+              return pickLichessMove(data);
+            });
+        });
+    }
+
+    function pickLichessMove(data) {
+      const top = (Array.isArray(data.moves) ? data.moves : [])
+        .map(m => ({ san: m.san, uci: m.uci, games: (m.white || 0) + (m.draws || 0) + (m.black || 0) }))
+        .filter(m => m.san && m.games > 0)
+        .sort((a, b) => b.games - a.games)
+        .slice(0, EXPLORER_TOP);
+      if (top.length === 0) throw new Error('в базе lichess нет ходов из этой позиции');
+      const total  = (data.white || 0) + (data.draws || 0) + (data.black || 0);
+      const picked = top[Math.floor(Math.random() * top.length)];
+      return { san: picked.san, uci: picked.uci, top: top, total: total };
+    }
+
+    function describeTop(picked) {
+      return picked.top
+        .map(m => picked.total > 0 ? m.san + ' ' + Math.round(m.games * 100 / picked.total) + '%' : m.san)
+        .join(' · ');
+    }
+
+    function playComputerMove(picked) {
+      const position  = new Chess(lastFen());
+      const fenBefore = position.fen();
+      let move = position.move(picked.san);
+      if (!move && picked.uci) {
+        move = position.move({ from: picked.uci.slice(0, 2), to: picked.uci.slice(2, 4), promotion: picked.uci.charAt(4) || 'q' });
+      }
+      if (!move) {
+        stopTrainer('Не получилось сыграть ход ' + picked.san + '.');
+        return;
+      }
+
+      const follow = !isReviewing && currentIdx === savedMoves.length - 1;
+      pushMove(move, fenBefore, position.fen());
+      if (follow) {
+        currentIdx = savedMoves.length - 1;
+        game.load(position.fen());
+        board.position(position.fen(), true);
+      }
+
+      if (position.game_over()) {
+        setTrainerStatus(gameOverText(position));
+      } else if (picked.top) {
+        setTrainerStatus('lichess топ-' + picked.top.length + ': ' + describeTop(picked) + ' → белые сыграли ' + move.san + '.');
+      }
+
+      renderMoveList();
+      updateTurnIndicator();
+    }
+
+    function takeBackTrainer() {
+      const count = savedMoves.length % 2 === 0 ? 1 : 2;
+      if (savedMoves.length - count < 1) return;
+      trainer.gen++;
+      savedMoves.splice(savedMoves.length - count, count);
+      deleteMovesFrom(savedMoves.length);
+      currentIdx = savedMoves.length - 1;
+      const fen = savedMoves[currentIdx].fen_after;
+      game.load(fen);
+      board.position(fen, true);
+      setTrainerStatus('');
+      renderMoveList();
+      updateTurnIndicator();
+    }
+
     // ── chessboard.js callbacks ───────────────────────────────────────────────
     function onDragStart(source, piece) {
       if (isReviewing || currentIdx < savedMoves.length - 1) return false;
       if (game.game_over()) return false;
+      if (trainer.active && piece.startsWith('w')) return false;
       if (game.turn() === 'w' && piece.startsWith('b')) return false;
       if (game.turn() === 'b' && piece.startsWith('w')) return false;
       return true;
@@ -588,25 +769,23 @@
       const move = game.move({ from: source, to: target, promotion: 'q' });
       if (!move) return 'snapback';
 
-      const fenAfter   = game.fen();
-      const moveNumber = Math.ceil((savedMoves.length + 1) / 2);
-      const color      = move.color === 'w' ? 'white' : 'black';
+      const expected = ROUSSEAU_LINE[savedMoves.length];
+      if (trainer.active && savedMoves.length < ROUSSEAU_LINE.length && move.san !== expected) {
+        game.undo();
+        setTrainerStatus('Не тот ход. В гамбите Руссо здесь ' + expected + '.', 'warn');
+        return 'snapback';
+      }
 
-      const data = {
-        move_number: moveNumber,
-        color:       color,
-        move_san:    move.san,
-        move_uci:    source + target,
-        fen_before:  fenBefore,
-        fen_after:   fenAfter
-      };
-
-      savedMoves.push(data);
-      appendMove(data);
+      pushMove(move, fenBefore, game.fen());
       currentIdx = savedMoves.length - 1;
 
       renderMoveList();
       updateTurnIndicator();
+
+      if (trainer.active) {
+        setTrainerStatus('');
+        scheduleComputerMove();
+      }
     }
 
     function onSnapEnd() {
@@ -621,6 +800,7 @@
         draggable:    true,
         position:     'start',
         showNotation: true,
+        orientation:  'black',
         pieceTheme:   'img/chesspieces/wikipedia/{piece}.png',
         onDragStart:  onDragStart,
         onDrop:       onDrop,
@@ -628,22 +808,6 @@
       };
 
       board = Chessboard('board', config);
-
-      savedMoves = loadMoves();
-
-      if (savedMoves.length > 0) {
-        currentIdx  = savedMoves.length - 1;
-        isReviewing = false;
-        const last  = savedMoves[currentIdx];
-        game.load(last.fen_after);
-        board.position(last.fen_after, false);
-      }
-
-      // Восстановить название дебюта из localStorage
-      applyDebutName(loadDebutName());
-
-      renderMoveList();
-      updateTurnIndicator();
 
       document.getElementById('btn-flip').addEventListener('click', () => board.flip());
       document.getElementById('btn-undo').addEventListener('click', undoMove);
@@ -698,20 +862,14 @@
       });
 
       document.getElementById('btn-clear').addEventListener('click', () => {
-        if (!confirm('Очистить всю партию?')) return;
-        clearAllMoves();
-        savedMoves  = [];
-        currentIdx  = -1;
-        isReviewing = false;
-        game.reset();
-        board.start(true);
-        applyDebutName('');
-        renderMoveList();
-        updateTurnIndicator();
+        if (!confirm('Очистить партию и начать гамбит Руссо заново?')) return;
+        startTrainer();
       });
 
       // Запускаем Stockfish (слой B). Если не получится — остаёмся на A.
       initEngine();
+
+      startTrainer();
     }
 
     // ── PGN Export ────────────────────────────────────────────────────────────
@@ -751,6 +909,10 @@
       const tempGame = new Chess();
       const ok = tempGame.load_pgn(pgnText);
       if (!ok) { alert('Ошибка: не удалось разобрать PGN-файл.'); return; }
+
+      trainer.gen++;
+      trainer.active = false;
+      setTrainerStatus('Загружена партия — автоигра выключена. «Очистить» начнёт гамбит Руссо заново.');
 
       // Replay all moves and collect data
       const history = tempGame.history({ verbose: true });

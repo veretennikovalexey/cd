@@ -6,7 +6,9 @@ This file gives Claude the context needed to work on this project effectively.
 
 A **single-page chess opening (debut) trainer** that runs entirely in the browser. The user (a Russian-speaking chess enthusiast named Alex) uses it to practice and review chess openings. The UI is in Russian; code comments are in Russian.
 
-The whole app is a **single static HTML file** (`index.html`) — no build step, no bundler, no server-side code. It can be opened directly via `file://` or served from any static HTTP server.
+The whole app is a **single static HTML file** (`index.html`) — no build step, no bundler. It is served by a tiny stdlib-only Python server (`server.py`) whose only extra job is proxying the Lichess opening explorer with the user's personal token.
+
+Current mode: **Rousseau Gambit trainer** (1. e4 e5 2. Nf3 Nc6 3. Bc4 f5). The user plays Black with the mouse; the computer plays White — scripted moves e4/Nf3/Bc4 after a 0.5 s pause, then a uniformly random pick among the top-3 most popular moves from the Lichess (not masters) database. If explorer stats can't be fetched, auto-play stops for good and the user moves both sides manually.
 
 ## Tech stack
 
@@ -24,6 +26,9 @@ The CDN scripts are referenced inline in `index.html`; everything else (engine, 
 ```
 index.html              # The whole app (HTML + CSS + JS, ~1200 lines)
 sd.json                 # User's saved debuts library: { "debuts": [{name, pgn}, ...] }
+server.py               # Static file server + proxy /explorer/lichess -> https://explorer.lichess.org/lichess (adds Bearer token)
+lichess_token.txt       # User's zero-scope Lichess personal token (git-ignored, never commit)
+README.md               # Russian description for the user: how to run, how to get the token
 engine/
   stockfish.asm.js      # Stockfish chess engine, asm.js build, runs in Web Worker
 img/
@@ -38,7 +43,7 @@ There is no `package.json`, no `node_modules`, no build artifacts. Editing `inde
 
 ## Running it
 
-The user runs `run.cmd` on Windows, which starts a local Python HTTP server on port 8000 and opens `http://localhost:8000/index.html` in the default browser. A local server is needed (rather than `file://`) because:
+The user runs `run.cmd` on Windows, which starts `python server.py` on port 8000 and opens `http://localhost:8000/index.html` in the default browser. Since 3 March 2026 the Lichess opening explorer requires authentication, so `server.py` reads `lichess_token.txt` and forwards explorer requests with `Authorization: Bearer <token>`; the browser never sees the token and there are no CORS issues. A local server is needed (rather than `file://`) because:
 - The Web Worker for Stockfish is loaded from a relative path and `file://` Worker policies vary by browser.
 - `fetch('sd.json')` is blocked in Chrome/Edge under `file://`.
 - The app has a fallback file-picker for `sd.json` when fetch fails, but the engine still needs the server to start reliably.
@@ -58,6 +63,7 @@ Everything lives inside one `<script>` block at the bottom of `index.html`. Logi
 7. **Navigation** — `goToMove`, `goToStart`, `goToEnd`, `stepBack`, `stepForward`, plus `undoMove` / `redoMove`. `stepBack` / `stepForward` never delete moves; `undoMove` deletes the last move only when in recording mode (cursor at the end). Arrow keys ←/→ are bound to step-back / step-forward.
 8. **chessboard.js callbacks** — `onDragStart`, `onDrop`, `onSnapEnd`. Drops are validated by chess.js; if illegal, returns `'snapback'`. Auto-promotes pawns to queen.
 9. **PGN import/export** — `savePGN` (uses `chess.js .pgn()`), `loadPGN` (uses `.load_pgn()` then re-plays each move to rebuild `savedMoves`).
+11. **Rousseau trainer** — constants `ROUSSEAU_LINE`, `COMPUTER_DELAY`, `EXPLORER_URL`, `EXPLORER_TOP`; state object `trainer = { active, gen }`. `startTrainer` (called at the end of `init` and by the clear button) resets the game with Black at the bottom; `scheduleComputerMove` plays the scripted move or `fetchLichessMove` → `pickLichessMove` → `playComputerMove`; `stopTrainer` ends auto-play. `trainer.gen` is bumped on restart/undo/PGN load so stale async results are ignored. In trainer mode `onDrop` rejects Black moves that deviate from the line, `onDragStart` blocks White pieces, and `undoMove` calls `takeBackTrainer` (takes back the user's move plus White's reply). Loading a PGN stops the trainer. The page no longer restores the previous game from localStorage on load.
 10. **Saved debuts modal** (`btn-home` / "домик" button) — `openDebutsList` tries `fetch('sd.json')`; on failure (e.g. file:// in Chrome) falls back to a manual file picker. `renderDebutList` shows names only; clicking loads via `loadDebutFromList` → `loadPGN`.
 
 ## Key conventions and gotchas
@@ -82,9 +88,9 @@ Everything lives inside one `<script>` block at the bottom of `index.html`. Logi
 
 ## What this project is NOT
 
-- Not a server-side app. No backend, no API, no database.
+- Not a server-side app. The only backend is `server.py` (static files + Lichess explorer proxy). No database.
 - Not a build-tooled project. Don't introduce webpack/vite/npm — keep it a single editable HTML file unless explicitly asked.
-- Not a chess-playing app — Stockfish only evaluates positions; it does not propose or play moves against the user. The user enters both sides' moves themselves to study openings.
+- Not an engine-playing app — Stockfish only evaluates positions. White's moves in the trainer come from the fixed Rousseau line and Lichess explorer statistics, never from Stockfish.
 
 ## User preferences (Alex)
 
