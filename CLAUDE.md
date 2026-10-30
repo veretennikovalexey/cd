@@ -8,7 +8,7 @@ A **single-page chess opening (debut) trainer** that runs entirely in the browse
 
 The whole app is a **single static HTML file** (`index.html`) — no build step, no bundler. It is served by a tiny stdlib-only Python server (`server.py`) whose only extra job is proxying the Lichess opening explorer with the user's personal token.
 
-Current mode: **Rousseau Gambit trainer** (1. e4 e5 2. Nf3 Nc6 3. Bc4 f5). The user plays Black with the mouse; the computer plays White — scripted moves e4/Nf3/Bc4 after a 0.5 s pause, then a uniformly random pick among the top-3 most popular moves from the Lichess (not masters) database. If explorer stats can't be fetched, auto-play stops for good and the user moves both sides manually.
+Current mode: **Italian Game trainer** (1. e4 e5 2. Nf3 Nc6 3. Bc4). The user plays White with the mouse; the computer plays Black — scripted replies e5/Nc6 after a 0.5 s pause, then a popularity-weighted random pick among the top-2 most popular moves from the Lichess (not masters) database. If explorer stats can't be fetched, auto-play stops for good and the user moves both sides manually.
 
 ## Tech stack
 
@@ -63,7 +63,7 @@ Everything lives inside one `<script>` block at the bottom of `index.html`. Logi
 7. **Navigation** — `goToMove`, `goToStart`, `goToEnd`, `stepBack`, `stepForward`, plus `undoMove` / `redoMove`. `stepBack` / `stepForward` never delete moves; `undoMove` deletes the last move only when in recording mode (cursor at the end). Arrow keys ←/→ are bound to step-back / step-forward.
 8. **chessboard.js callbacks** — `onDragStart`, `onDrop`, `onSnapEnd`. Drops are validated by chess.js; if illegal, returns `'snapback'`. Auto-promotes pawns to queen.
 9. **PGN import/export** — `savePGN` (uses `chess.js .pgn()`), `loadPGN` (uses `.load_pgn()` then re-plays each move to rebuild `savedMoves`).
-11. **Rousseau trainer** — constants `ROUSSEAU_LINE`, `COMPUTER_DELAY`, `EXPLORER_URL`, `EXPLORER_TOP`; state object `trainer = { active, gen }`. `startTrainer` (called at the end of `init` and by the clear button) resets the game with Black at the bottom; `scheduleComputerMove` plays the scripted move or `fetchLichessMove` → `pickLichessMove` → `playComputerMove`; `stopTrainer` ends auto-play. `trainer.gen` is bumped on restart/undo/PGN load so stale async results are ignored. In trainer mode `onDrop` rejects Black moves that deviate from the line, `onDragStart` blocks White pieces, and `undoMove` calls `takeBackTrainer` (takes back the user's move plus White's reply). Loading a PGN stops the trainer. The page no longer restores the previous game from localStorage on load.
+11. **Italian Game trainer** — constants `ITALIAN_NAME`, `ITALIAN_LINE`, `COMPUTER_DELAY`, `EXPLORER_URL`, `EXPLORER_TOP`; state object `trainer = { active, gen }`. `startTrainer` (called at the end of `init` and by the clear button) resets the game with White at the bottom; `scheduleComputerMove` plays the scripted move or `fetchLichessMove` → `pickLichessMove` (weighted by game count) → `playComputerMove`; `stopTrainer` ends auto-play. `trainer.gen` is bumped on restart/undo/PGN load so stale async results are ignored. In trainer mode `onDrop` rejects White moves that deviate from the line, `onDragStart` blocks Black pieces, and `undoMove` calls `takeBackTrainer` (takes back the user's move plus Black's reply; can go back to the empty board). Loading a PGN stops the trainer. The page no longer restores the previous game from localStorage on load.
 10. **Saved debuts modal** (`btn-home` / "домик" button) — `openDebutsList` tries `fetch('sd.json')`; on failure (e.g. file:// in Chrome) falls back to a manual file picker. `renderDebutList` shows names only; clicking loads via `loadDebutFromList` → `loadPGN`.
 
 ## Key conventions and gotchas
@@ -90,7 +90,7 @@ Everything lives inside one `<script>` block at the bottom of `index.html`. Logi
 
 - Not a server-side app. The only backend is `server.py` (static files + Lichess explorer proxy). No database.
 - Not a build-tooled project. Don't introduce webpack/vite/npm — keep it a single editable HTML file unless explicitly asked.
-- Not an engine-playing app — Stockfish only evaluates positions. White's moves in the trainer come from the fixed Rousseau line and Lichess explorer statistics, never from Stockfish.
+- Not an engine-playing app — Stockfish only evaluates positions. Black's moves in the trainer come from the fixed Italian Game line and Lichess explorer statistics, never from Stockfish.
 
 ## User preferences (Alex)
 
